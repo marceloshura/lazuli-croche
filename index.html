@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mosaico Background</title>
+
+  <style>
+    :root{
+      /* Ajuste fino */
+      --tile-min-width: 220px;      /* largura mínima de cada bloco */
+      --tile-aspect: 9 / 16;        /* 1080x1920 */
+      --gap: 10px;                  /* espaçamento entre blocos */
+      --bg-darken: 0.25;            /* escurece um pouco por cima (0 a 0.8) */
+      --blur: 0px;                  /* se quiser um blur: 2px, 4px... */
+      --speed: 18;                  /* velocidade do "subir" (maior = mais rápido) */
+    }
+
+    *{ box-sizing: border-box; }
+    html, body { height: 100%; }
+    body{
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      overflow: hidden;
+      background: #000;
+    }
+
+    /* Camada do mosaico */
+    .mosaic{
+      position: fixed;
+      inset: 0;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(var(--tile-min-width), 1fr));
+      gap: var(--gap);
+      padding: var(--gap);
+      filter: blur(var(--blur));
+      transform: translateZ(0);
+      will-change: transform;
+    }
+
+    .tile{
+      width: 100%;
+      aspect-ratio: var(--tile-aspect);
+      border-radius: 14px;
+      overflow: hidden;
+      background: #111;
+      position: relative;
+      box-shadow: 0 10px 30px rgba(0,0,0,.35);
+    }
+
+    /* A imagem que "sobe" dentro do tile */
+    .tile .img{
+      position: absolute;
+      inset: 0;
+      background-size: cover;     /* mantém preenchido */
+      background-position: center;
+      transform: translate3d(0, 0, 0);
+      will-change: transform;
+    }
+
+    /* Overlay para escurecer e dar contraste (opcional) */
+    .overlay{
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,var(--bg-darken));
+      pointer-events: none;
+    }
+
+    /* Exemplo de conteúdo por cima (remova se não quiser) */
+    .content{
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      text-align: center;
+      color: #fff;
+      z-index: 5;
+    }
+
+    .card{
+      max-width: 720px;
+      width: 100%;
+      padding: 22px 18px;
+      border-radius: 18px;
+      background: rgba(0,0,0,.35);
+      border: 1px solid rgba(255,255,255,.12);
+      backdrop-filter: blur(10px);
+    }
+
+    .card h1{
+      margin: 0 0 10px 0;
+      font-size: clamp(22px, 3vw, 34px);
+      letter-spacing: -0.02em;
+    }
+
+    .card p{
+      margin: 0;
+      opacity: .9;
+      line-height: 1.45;
+      font-size: clamp(14px, 1.6vw, 16px);
+    }
+
+    @media (max-width: 420px){
+      :root{ --tile-min-width: 160px; --gap: 8px; }
+      .tile{ border-radius: 12px; }
+    }
+  </style>
+</head>
+
+<body>
+  <div id="mosaic" class="mosaic" aria-hidden="true"></div>
+  <div class="overlay" aria-hidden="true"></div>
+
+  <!-- Remova essa camada se quiser só o background -->
+  <main class="content">
+    <div class="card">
+      <h1>Mosaico animado no background</h1>
+      <p>As imagens (1.png a 5.png) são repetidas no grid e sobem suavemente.</p>
+    </div>
+  </main>
+
+  <script>
+    // Arquivos (na mesma pasta do index)
+    const images = ["1.png","2.png","3.png","4.png","5.png"];
+
+    // Config geral (ajuste se quiser)
+    const mosaicEl = document.getElementById("mosaic");
+    const SPEED = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--speed")) || 18;
+
+    // Cria quantos tiles couberem na tela
+    function buildMosaic(){
+      mosaicEl.innerHTML = "";
+
+      const gap = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--gap")) || 10;
+      const minW = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--tile-min-width")) || 220;
+      const aspect = 16/9; // altura = largura * (16/9) porque o tile é 9/16 (vertical)
+
+      const w = window.innerWidth - gap * 2;
+      const h = window.innerHeight - gap * 2;
+
+      const cols = Math.max(1, Math.floor(w / (minW + gap)));
+      const tileW = (w - gap * (cols - 1)) / cols;
+      const tileH = tileW * aspect;
+
+      const rows = Math.max(1, Math.ceil(h / (tileH + gap)));
+      const count = cols * rows;
+
+      for(let i=0;i<count;i++){
+        const tile = document.createElement("div");
+        tile.className = "tile";
+
+        const img = document.createElement("div");
+        img.className = "img";
+
+        // escolhe imagem e dá offsets diferentes pra ficar "vivo"
+        const src = images[i % images.length];
+        img.style.backgroundImage = `url('${src}')`;
+
+        // offsets aleatórios (em % e px)
+        img.dataset.phase = (Math.random() * Math.PI * 2).toString();
+        img.dataset.amp = (30 + Math.random() * 70).toString(); // amplitude do movimento (px)
+        img.dataset.shift = (Math.random() * 120).toString();   // deslocamento base (px)
+
+        tile.appendChild(img);
+        mosaicEl.appendChild(tile);
+      }
+    }
+
+    // Animação: "sobe" suavemente (loop)
+    let start = null;
+    function animate(ts){
+      if(!start) start = ts;
+      const t = (ts - start) / 1000;
+
+      const imgs = mosaicEl.querySelectorAll(".img");
+      imgs.forEach(el => {
+        const phase = parseFloat(el.dataset.phase || "0");
+        const amp = parseFloat(el.dataset.amp || "60");
+        const shift = parseFloat(el.dataset.shift || "0");
+
+        // Movimento principal: sobe ao longo do tempo
+        // + um leve "wave" pra não ficar tudo igual
+        const base = -(t * SPEED) + shift;
+        const wave = Math.sin(t * 0.8 + phase) * (amp * 0.25);
+
+        // Usamos translateY com módulo pra dar sensação contínua
+        // (não precisa resetar a cada tile — fica suave)
+        const y = base + wave;
+        el.style.transform = `translate3d(0, ${y}px, 0)`;
+      });
+
+      requestAnimationFrame(animate);
+    }
+
+    // Rebuild responsivo
+    let resizeTimer = null;
+    window.addEventListener("resize", () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        buildMosaic();
+      }, 120);
+    });
+
+    // Start
+    buildMosaic();
+    requestAnimationFrame(animate);
+  </script>
+</body>
+</html>
