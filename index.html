@@ -68,7 +68,6 @@
       z-index: 2;
     }
 
-    /* Só o botão por cima */
     .cta-wrap{
       position: fixed;
       inset: 0;
@@ -76,7 +75,7 @@
       place-items: center;
       padding: 22px;
       z-index: 5;
-      pointer-events: none; /* permite clicar só no botão */
+      pointer-events: none;
     }
 
     .cta{
@@ -89,7 +88,7 @@
       background: #fff;
       color: #000;
       text-decoration: none;
-      font-weight: 800;
+      font-weight: 850;
       letter-spacing: 0.01em;
       border: 1px solid rgba(0,0,0,.06);
       box-shadow: 0 16px 40px rgba(0,0,0,.35);
@@ -97,6 +96,9 @@
       user-select: none;
       -webkit-tap-highlight-color: transparent;
       width: min(520px, 100%);
+
+      /* +15% */
+      font-size: 1.15rem;
     }
 
     .cta:hover{ transform: translateY(-1px); }
@@ -108,6 +110,7 @@
         --gap: var(--gap-mobile);
       }
       .tile{ border-radius: 10px; }
+      .cta{ font-size: 1.12rem; } /* mantém grande no mobile também */
     }
   </style>
 </head>
@@ -118,7 +121,7 @@
 
   <div class="cta-wrap">
     <a class="cta"
-      href="https://wa.me/5511954919118?text=Oi!%20Quero%20conhecer%20seus%20produtos."
+      href="https://wa.me/5511954919118?text=Oi%2C%20Tai.%20Gostaria%20de%20saber%20mais%20sobre%20os%20produtos%20e%20valores."
       target="_blank" rel="noopener noreferrer">
       Conheça nossos produtos
     </a>
@@ -131,12 +134,20 @@
     const mosaicEl = document.getElementById("mosaic");
     const SPEED_BASE = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--speed")) || 20;
 
+    // Layout / velocidades
     let cols = 1;
     let colSpeeds = [];
 
+    // Para o loop infinito (rodízio)
+    let tileW = 200;
+    let tileH = 355;
+    let gap = 6;
+    let rows = 1;
+    let stepY = 0; // tileH + gap
+
     function computeCols(){
       const styles = getComputedStyle(document.documentElement);
-      const gap = parseFloat(styles.getPropertyValue("--gap")) || 6;
+      gap = parseFloat(styles.getPropertyValue("--gap")) || 6;
       const minW = parseFloat(styles.getPropertyValue("--tile-min-width")) || 190;
 
       const w = window.innerWidth - gap * 2;
@@ -158,17 +169,17 @@
       generateColumnSpeeds();
 
       const styles = getComputedStyle(document.documentElement);
-      const gap = parseFloat(styles.getPropertyValue("--gap")) || 6;
       const aspect = 16/9; // tile 9/16 => altura = largura * 16/9
 
       const w = window.innerWidth - gap * 2;
       const h = window.innerHeight - gap * 2;
 
-      const tileW = Math.max(1, (w - gap * (cols - 1)) / cols);
-      const tileH = tileW * aspect;
+      tileW = Math.max(1, (w - gap * (cols - 1)) / cols);
+      tileH = tileW * aspect;
+      stepY = tileH + gap;
 
-      // +1 linha extra para garantir preenchimento total sem “fundo aparecendo”
-      const rows = Math.max(1, Math.ceil(h / (tileH + gap)) + 1);
+      // +2 linhas extras para garantir que o loop nunca “revele” fundo
+      rows = Math.max(1, Math.ceil(h / stepY) + 2);
       const count = cols * rows;
 
       for(let i = 0; i < count; i++){
@@ -177,19 +188,26 @@
 
         const img = document.createElement("div");
         img.className = "img";
-
         img.style.backgroundImage = `url('${images[i % images.length]}')`;
 
         const colIndex = i % cols;
-        img.dataset.col = String(colIndex);
+        const rowIndex = Math.floor(i / cols);
 
+        img.dataset.col = String(colIndex);
+        img.dataset.row = String(rowIndex);
+
+        // fase/organicidade
         img.dataset.phase = (Math.random() * Math.PI * 2).toString();
-        img.dataset.amp = (20 + Math.random() * 50).toString();
-        img.dataset.shift = (Math.random() * 140).toString();
+        img.dataset.amp = (18 + Math.random() * 45).toString();
 
         tile.appendChild(img);
         mosaicEl.appendChild(tile);
       }
+    }
+
+    // Modulo “matemático” que funciona com negativos
+    function mod(n, m){
+      return ((n % m) + m) % m;
     }
 
     let start = null;
@@ -197,19 +215,30 @@
       if(!start) start = ts;
       const t = (ts - start) / 1000;
 
+      const period = rows * stepY; // altura total do “ciclo” por coluna
+
       const imgs = mosaicEl.querySelectorAll(".img");
       imgs.forEach(el => {
         const col = parseInt(el.dataset.col || "0", 10);
+        const row = parseInt(el.dataset.row || "0", 10);
+
         const colSpeed = colSpeeds[col] ?? SPEED_BASE;
 
         const phase = parseFloat(el.dataset.phase || "0");
-        const amp = parseFloat(el.dataset.amp || "40");
-        const shift = parseFloat(el.dataset.shift || "0");
+        const amp = parseFloat(el.dataset.amp || "30");
 
-        const base = -(t * colSpeed) + shift;
-        const wave = Math.sin(t * 0.9 + phase + col * 0.35) * (amp * 0.35);
+        // posição base do tile na coluna
+        const baseY = row * stepY;
 
-        el.style.transform = `translate3d(0, ${base + wave}px, 0)`;
+        // sobe com loop: quando passar do topo, volta pra baixo (rodízio)
+        const travel = t * colSpeed;
+        const loopY = mod(baseY - travel, period);
+
+        // wave sutil
+        const wave = Math.sin(t * 0.9 + phase + col * 0.35) * (amp * 0.25);
+
+        // desloca dentro do tile (como a imagem já ocupa o tile, isso “puxa” visual)
+        el.style.transform = `translate3d(0, ${loopY + wave - baseY}px, 0)`;
       });
 
       requestAnimationFrame(animate);
@@ -218,7 +247,10 @@
     let resizeTimer = null;
     window.addEventListener("resize", () => {
       clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(buildMosaic, 140);
+      resizeTimer = setTimeout(() => {
+        start = null; // reseta a animação pra não dar salto
+        buildMosaic();
+      }, 140);
     });
 
     buildMosaic();
